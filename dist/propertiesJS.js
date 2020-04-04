@@ -1,17 +1,17 @@
 /**
  * propertiesjs - Javascript properties editor for browsers
- * @version v1.5.1
+ * @version v1.6.0
  * @link https://github.com/icebob/propertiesjs
  * @license MIT
  * Copyright (c) 2016 Icebob
  * 
  * 
- * Build Date: Sat Mar 12 2016 15:31:12 GMT+0100 (Central Europe Standard Time)
+ * Build Date: Wed Mar 23 2016 16:06:47 GMT+0100 (Közép-európai téli idő )
  * 
  */
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 (function() {
-  var Emitter, PJS, PJSEditors, PJSObjectHandler, _, ui;
+  var Emitter, PJS, PJSEditors, PJSObjectHandler, _, store, ui;
 
   _ = require("lodash");
 
@@ -22,6 +22,8 @@
   PJSObjectHandler = require("./modules/objects");
 
   PJSEditors = require("./modules/editors");
+
+  store = require("./modules/store");
 
   module.exports = PJS = (function() {
     PJS.prototype.container = null;
@@ -81,6 +83,12 @@
         this.disableControlButtons();
       }
       this.container.append(table);
+      this.container.on("keydown", ":input:not(textarea)", function(event) {
+        if (event.keyCode === 13) {
+          event.preventDefault();
+          return false;
+        }
+      });
       this.clearChangedFlag();
       return this;
     }
@@ -88,16 +96,18 @@
     PJS.prototype.createEditors = function(editors, objs, tbody, groupField) {
       return $.each(editors, (function(_this) {
         return function(i, editorSchema) {
-          var EditorClass, childEditors, editor, editorCell, input, nameCell, ref, ref1, tr, value;
+          var EditorClass, childEditors, editor, editorCell, input, nameCell, ref, ref1, state, tr, value;
           if (editorSchema.type === "group") {
             ref = ui.generateGroupRow(_this, editorSchema, groupField), tr = ref[0], nameCell = ref[1];
             nameCell.on("click", function() {
               if (tr.hasClass("collapsed")) {
                 tr.removeClass("collapsed");
-                return tbody.find("tr.group-" + editorSchema.field).show();
+                tbody.find("tr.group-" + editorSchema.field).show();
+                return store.setGroupState(editorSchema.field, false);
               } else {
                 tr.addClass("collapsed");
-                return tbody.find("tr.group-" + editorSchema.field).hide();
+                tbody.find("tr.group-" + editorSchema.field).hide();
+                return store.setGroupState(editorSchema.field, true);
               }
             });
             tr.appendTo(tbody);
@@ -111,7 +121,8 @@
                 _this.createEditors(childEditors, objs, tbody, editorSchema.field);
               }
             }
-            if (editorSchema.collapsed === true) {
+            state = store.getGroupState(editorSchema.field, editorSchema.collapsed === true);
+            if (state) {
               tbody.find("tr.group-" + editorSchema.field).hide();
             }
             return;
@@ -279,7 +290,7 @@
 
 }).call(this);
 
-},{"./modules/editors":26,"./modules/objects":35,"./modules/ui":36,"event-emitter":2,"lodash":17}],2:[function(require,module,exports){
+},{"./modules/editors":26,"./modules/objects":35,"./modules/store":36,"./modules/ui":37,"event-emitter":2,"lodash":17}],2:[function(require,module,exports){
 'use strict';
 
 var d        = require('d')
@@ -19215,7 +19226,7 @@ module.exports = function (searchString/*, position*/) {
         this.input.append($("<span/>").text(this.settings.title));
         this.tr.find("td:eq(0)").text("");
         this.input.on("click", (function(_this) {
-          return function() {
+          return function(event) {
             if (_this.settings.schemaFunction === true) {
               if (_this.settings["onclick"]) {
                 _this.settings.onclick(_this.PJS.objectHandler.objs);
@@ -19223,7 +19234,9 @@ module.exports = function (searchString/*, position*/) {
             } else {
               _this.PJS.objectHandler.callFunctionInObjects(_this.fieldName);
             }
-            return _this.PJS.emit("function-" + _this.fieldName, _this, _this.PJS.objectHandler.objs);
+            _this.PJS.emit("function-" + _this.fieldName, _this, _this.PJS.objectHandler.objs);
+            event.preventDefault();
+            return false;
           };
         })(this));
       }
@@ -19477,6 +19490,15 @@ module.exports = function (searchString/*, position*/) {
           return _this.valueChanged(_this.getInputValue());
         };
       })(this));
+      this.input.on("keydown", (function(_this) {
+        return function(event) {
+          if (event.keyCode === 13) {
+            event.preventDefault();
+            _this.input.trigger("change");
+            return false;
+          }
+        };
+      })(this));
       return this.input;
     };
 
@@ -19517,6 +19539,7 @@ module.exports = function (searchString/*, position*/) {
     }
 
     PJSImageEditor.prototype.createInput = function() {
+      var removeButton;
       this.input = $("<input/>").attr("type", "text");
       if (this.settings.required === true) {
         this.input.attr("required", "required");
@@ -19538,8 +19561,24 @@ module.exports = function (searchString/*, position*/) {
         })(this));
       }
       if (this.settings.preview !== false) {
-        this.preview = $("<div/>").addClass("preview");
+        removeButton = $("<div/>").addClass("remove").attr("title", "Remove image").on("click", (function(_this) {
+          return function() {
+            _this.input.val("");
+            _this.fileInput.val("");
+            return _this.input.trigger("change");
+          };
+        })(this));
+        this.preview = $("<div/>").addClass("preview").append(removeButton);
       }
+      this.input.on("keydown", (function(_this) {
+        return function(event) {
+          if (event.keyCode === 13) {
+            event.preventDefault();
+            _this.input.trigger("change");
+            return false;
+          }
+        };
+      })(this));
       this.input.on("change", (function(_this) {
         return function() {
           _this.valueChanged(_this.getInputValue());
@@ -19840,7 +19879,7 @@ module.exports = function (searchString/*, position*/) {
     }
 
     PJSSpectrumEditor.prototype.createInput = function(tr, editorCell, nameCell) {
-      var e, error, setHelperText;
+      var e, setHelperText;
       this.input = $("<input/>").attr("type", this.settings.type);
       if (this.settings.required === true) {
         this.input.attr("required", "required");
@@ -19870,8 +19909,8 @@ module.exports = function (searchString/*, position*/) {
             };
           })(this)
         });
-      } catch (error) {
-        e = error;
+      } catch (_error) {
+        e = _error;
         console.warn("Spectrum color library is missing. Please download from http://bgrins.github.io/spectrum/ and load the script in the HTML head section!");
       }
       return [];
@@ -19936,6 +19975,15 @@ module.exports = function (searchString/*, position*/) {
       this.input.on("change", (function(_this) {
         return function() {
           return _this.valueChanged(_this.getInputValue());
+        };
+      })(this));
+      this.input.on("keydown", (function(_this) {
+        return function(event) {
+          if (event.keyCode === 13) {
+            event.preventDefault();
+            _this.input.trigger("change");
+            return false;
+          }
         };
       })(this));
       return this.input;
@@ -20204,6 +20252,24 @@ module.exports = function (searchString/*, position*/) {
 }).call(this);
 
 },{"lodash":17}],36:[function(require,module,exports){
+(function() {
+  window.PJSGroupStates = {};
+
+  module.exports = {
+    getGroupState: function(name, defValue) {
+      if (window.PJSGroupStates[name] != null) {
+        return window.PJSGroupStates[name];
+      }
+      return defValue;
+    },
+    setGroupState: function(name, state) {
+      return window.PJSGroupStates[name] = state;
+    }
+  };
+
+}).call(this);
+
+},{}],37:[function(require,module,exports){
 (function() {
   module.exports = {
     getContainer: function(c) {

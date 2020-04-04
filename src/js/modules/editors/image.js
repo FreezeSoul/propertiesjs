@@ -15,6 +15,7 @@
     }
 
     PJSImageEditor.prototype.createInput = function() {
+      var removeButton;
       this.input = $("<input/>").attr("type", "text");
       if (this.settings.required === true) {
         this.input.attr("required", "required");
@@ -36,8 +37,24 @@
         })(this));
       }
       if (this.settings.preview !== false) {
-        this.preview = $("<div/>").addClass("preview");
+        removeButton = $("<div/>").addClass("remove").attr("title", "Remove image").on("click", (function(_this) {
+          return function() {
+            _this.input.val("");
+            _this.fileInput.val("");
+            return _this.input.trigger("change");
+          };
+        })(this));
+        this.preview = $("<div/>").addClass("preview").append(removeButton);
       }
+      this.input.on("keydown", (function(_this) {
+        return function(event) {
+          if (event.keyCode === 13) {
+            event.preventDefault();
+            _this.input.trigger("change");
+            return false;
+          }
+        };
+      })(this));
       this.input.on("change", (function(_this) {
         return function() {
           _this.valueChanged(_this.getInputValue());
